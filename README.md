@@ -8,7 +8,7 @@
 
 <div align="center">
 
-  <h3 align="center">Irrigação Automática com Arduino</h3>
+  <h3 align="center">Irrigação Automática com NodeMCU ESP32</h3>
 
   <p align="center">
     A Revolução Verde Automatizada!
@@ -52,7 +52,7 @@
 
 ## Sobre o projeto
 
-Este projeto propõe a utilização do Arduino como alternativa de automatizar o processo de irrigação em cultivos. Uma maneira convencional de aumentar a produtividade agrícola. A combinação de sensor de Umidade do Solo e minibomba de água, são essenciais para otimização e gestão da irrigação deste projeto.
+Este projeto propõe a utilização do NodeMCU ESP32 como alternativa de automatizar o processo de irrigação em cultivos. Uma maneira convencional de aumentar a produtividade agrícola. A combinação de sensor de Umidade do Solo e minibomba de água, são essenciais para otimização e gestão da irrigação deste projeto.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -100,7 +100,7 @@ Neste projeto, foram utilizadas as seguintes ferramentas, bibliotecas e linguage
 - [x] Artigo Científico Parte 1
 - [x] Artigo Científico Parte 2
 - [x] Artigo Científico Parte 3 (Funcionamento, Referências/Bibliografia, Critérios básicos, Descrição de métodos, ferramentas, lista descritiva de materiais)
-- [ ] Desenvolvimento do Código e Construção do Projeto
+- [ ] Desenvolvimento do Projeto e Entrega.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
