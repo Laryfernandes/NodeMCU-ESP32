@@ -3,8 +3,8 @@
 #include <PubSubClient.h>
 
 // Definição das credenciais da rede Wi-Fi
-const char* ssid = "NGNL"; // Substitua pelo nome da sua rede Wi-Fi
-const char* password = "Liso9445"; // Substitua pela senha da sua rede Wi-Fi
+const char* ssid = "NOME DO SEU WIFI"; // Substitua pelo nome da sua rede Wi-Fi
+const char* password = "SENHA DO SEU WIFI"; // Substitua pela senha da sua rede Wi-Fi
 
 // Configurações do servidor MQTT (broker)
 const char* mqtt_server = "broker.emqx.io"; // Endereço do servidor MQTT
