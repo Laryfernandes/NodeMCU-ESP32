@@ -3,8 +3,8 @@
 #include <PubSubClient.h>
 
 // Configurações do Wi-Fi
-const char* ssid = "NGNL";
-const char* password = "Liso9445";
+const char* ssid = "";
+const char* password = "";
 
 // Configurações MQTT
 const char* mqtt_server = "broker.emqx.io";
