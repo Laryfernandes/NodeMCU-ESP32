@@ -17,6 +17,7 @@ PubSubClient mqttClient(espClient); // Cliente MQTT
 #define SOIL_SENSOR_PIN 33
 #define HUMIDITY_TOPIC "umidade/solo" // Tópico da umidade do solo
 #define CONTROL_TOPIC "controle/dispositivo" // Tópico de controle do dispositivo
+#define RELAY_STATUS_TOPIC "status/relé" // Tópico do status do relé
 
 #define RELAY_PIN 32
 #define MIN_HUMIDITY 45
@@ -76,8 +77,10 @@ void sendHumidity() {
     // Controla o relé com base na umidade medida
     if (humidityValue < MIN_HUMIDITY) {
       digitalWrite(RELAY_PIN, HIGH); // Liga o relé se a umidade estiver abaixo do limite mínimo
+      mqttClient.publish(RELAY_STATUS_TOPIC, "ativo"); // Publica o status do relé
     } else if (humidityValue >= MAX_HUMIDITY) {
       digitalWrite(RELAY_PIN, LOW); // Desliga o relé se a umidade atingir o limite máximo
+      mqttClient.publish(RELAY_STATUS_TOPIC, "inativo"); // Publica o status do relé
     }
 
     // Verifica se a conexão MQTT está ativa e publica a umidade do solo
@@ -90,6 +93,7 @@ void sendHumidity() {
   } else {
     digitalWrite(RELAY_PIN, LOW); // Desliga o relé se o dispositivo estiver desligado
     Serial.println("Dispositivo desligado, não é possível enviar a umidade");
+    mqttClient.publish(RELAY_STATUS_TOPIC, "inativo"); // Publica o status do relé
   }
 }
 
