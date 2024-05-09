@@ -16,14 +16,17 @@ PubSubClient mqttClient(espClient);
 #define CONTROL_TOPIC "controle/dispositivo"
 #define RELAY_STATUS_TOPIC "status/relé"
 #define RESERVOIR_STATUS_TOPIC "status/reservatório"
+#define UNLOCK_TOPIC "controle/desbloquear"
 
 #define RELAY_PIN 32
 #define MIN_HUMIDITY 45
 #define MAX_HUMIDITY 60
 
 bool deviceRunning = true;
+unsigned long lastHumidityChangeTime = 0;
 unsigned long relayActivationTime = 0;
 bool relayBlocked = false;
+bool manualUnlocked = false;
 bool previousRelayState = false;
 
 // Callback para mensagens MQTT recebidas
@@ -32,6 +35,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (String(topic) == CONTROL_TOPIC) {
     deviceRunning = (message == "ligar");
     Serial.println(deviceRunning ? "Dispositivo ligado" : "Dispositivo desligado");
+  } else if (String(topic) == UNLOCK_TOPIC) {
+    if (message == "desbloquear") {
+      manualUnlocked = true;
+      digitalWrite(RELAY_PIN, HIGH);
+      mqttClient.publish(RELAY_STATUS_TOPIC, "desbloqueado");
+      Serial.println("Relé desbloqueado manualmente");
+      relayActivationTime = millis(); // Reinicia o tempo de ativação do relé
+    }
   }
 }
 
@@ -57,6 +68,7 @@ void setupMQTT() {
     if (mqttClient.connect("ESP32Cliente")) {
       Serial.println("Conectado ao broker MQTT");
       mqttClient.subscribe(CONTROL_TOPIC);
+      mqttClient.subscribe(UNLOCK_TOPIC);
     } else {
       Serial.print("Falha na conexão, código de retorno=");
       Serial.print(mqttClient.state());
@@ -91,23 +103,31 @@ void publishReservoirStatus(bool blocked) {
 // Atualizar estado do relé com base na umidade do solo
 void updateRelayState(int humidityValue) {
   if (deviceRunning) {
-    if (humidityValue < MIN_HUMIDITY && !relayBlocked) {
+    if (!manualUnlocked) {
+      if (humidityValue < MIN_HUMIDITY && !relayBlocked) {
+        if (millis() - relayActivationTime >= 5000) {
+          relayBlocked = true;
+          digitalWrite(RELAY_PIN, LOW);
+          publishRelayStatus("bloqueado");
+        } else {
+          digitalWrite(RELAY_PIN, HIGH);
+          publishRelayStatus("ativo");
+        }
+      } else if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
+        digitalWrite(RELAY_PIN, LOW);
+        publishRelayStatus("inativo");
+      }
+
+      if (previousRelayState != relayBlocked) {
+        publishReservoirStatus(relayBlocked);
+        previousRelayState = relayBlocked;
+      }
+    } else {
       if (millis() - relayActivationTime >= 5000) {
         relayBlocked = true;
-        digitalWrite(RELAY_PIN, LOW);
-        publishRelayStatus("bloqueado");
-      } else {
-        digitalWrite(RELAY_PIN, HIGH);
-        publishRelayStatus("ativo");
+        manualUnlocked = false;
+        publishRelayStatus("inativo");
       }
-    } else if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
-      digitalWrite(RELAY_PIN, LOW);
-      publishRelayStatus("inativo");
-    }
-
-    if (previousRelayState != relayBlocked) {
-      publishReservoirStatus(relayBlocked);
-      previousRelayState = relayBlocked;
     }
   } else {
     digitalWrite(RELAY_PIN, LOW);
@@ -124,6 +144,10 @@ void sendHumidity() {
   Serial.print("Umidade: ");
   Serial.print(humidityValue);
   Serial.println("%");
+
+  if (humidityValue != MIN_HUMIDITY && humidityValue != MAX_HUMIDITY) {
+    lastHumidityChangeTime = millis();
+  }
 
   publishHumidity(humidityValue);
 
