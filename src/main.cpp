@@ -2,52 +2,73 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
+// Configurações do Wi-Fi
 const char* ssid = "NGNL";
 const char* password = "Liso9445";
 
+// Configurações MQTT
 const char* mqtt_server = "broker.emqx.io";
 const int mqtt_port = 1883;
+
+// Pinagem
+#define SOIL_SENSOR_PIN 33
+#define RELAY_PIN 32
+
+// Tópicos MQTT
+#define HUMIDITY_TOPIC "umidade/solo"
+#define CONTROL_TOPIC "controle/dispositivo"
+#define RELAY_STATUS_TOPIC "status/rele"
+#define RESERVOIR_STATUS_TOPIC "status/reservatorio"
+#define UNLOCK_TOPIC "controle/desbloquear"
+
+// Limites de umidade
+#define MIN_HUMIDITY 15
+#define MAX_HUMIDITY 30
+
+// Variáveis de controle
+bool deviceRunning = true;
+bool relayBlocked = false;
+bool manualUnlocked = false;
+unsigned long lastHumidityChangeTime = 0;
+unsigned int consecutiveLowReadings = 0;
+bool previousRelayState = false;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-#define SOIL_SENSOR_PIN 33
-#define HUMIDITY_TOPIC "umidade/solo"
-#define CONTROL_TOPIC "controle/dispositivo"
-#define RELAY_STATUS_TOPIC "status/relé"
-#define RESERVOIR_STATUS_TOPIC "status/reservatório"
-#define UNLOCK_TOPIC "controle/desbloquear"
+// Protótipos de Função
+void setupWiFi();
+void setupMQTT();
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void publishHumidity(int humidityValue);
+void publishRelayStatus(const char* status);
+void publishReservoirStatus(bool blocked);
+void updateRelayState(int humidityValue);
+void handleControlMessage(const String& message);
+void handleUnlockMessage(const String& message);
+void connectToWiFi();
+void connectToMQTT();
+int readHumidity();
+void sendHumidityData(int humidityValue);
 
-#define RELAY_PIN 32
-#define MIN_HUMIDITY 45
-#define MAX_HUMIDITY 60
-
-bool deviceRunning = true;
-unsigned long lastHumidityChangeTime = 0;
-unsigned long relayActivationTime = 0;
-bool relayBlocked = false;
-bool manualUnlocked = false;
-bool previousRelayState = false;
-
-// Callback para mensagens MQTT recebidas
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  String message = String((char*)payload).substring(0, length);
-  if (String(topic) == CONTROL_TOPIC) {
-    deviceRunning = (message == "ligar");
-    Serial.println(deviceRunning ? "Dispositivo ligado" : "Dispositivo desligado");
-  } else if (String(topic) == UNLOCK_TOPIC) {
-    if (message == "desbloquear") {
-      manualUnlocked = true;
-      digitalWrite(RELAY_PIN, HIGH);
-      mqttClient.publish(RELAY_STATUS_TOPIC, "desbloqueado");
-      Serial.println("Relé desbloqueado manualmente");
-      relayActivationTime = millis(); // Reinicia o tempo de ativação do relé
-    }
-  }
+void setup() {
+  Serial.begin(9600);
+  connectToWiFi();
+  connectToMQTT();
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
 }
 
-// Inicialização do Wi-Fi
-void setupWiFi() {
+void loop() {
+  if (!mqttClient.connected()) {
+    connectToMQTT();
+  }
+  mqttClient.loop();
+  sendHumidityData(readHumidity());
+  delay(1000);
+}
+
+void connectToWiFi() {
   Serial.println("Conectando ao WiFi...");
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -59,8 +80,7 @@ void setupWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-// Inicialização do MQTT
-void setupMQTT() {
+void connectToMQTT() {
   Serial.println("Conectando ao servidor MQTT...");
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setCallback(mqttCallback);
@@ -78,7 +98,31 @@ void setupMQTT() {
   }
 }
 
-// Publicar a umidade do solo via MQTT
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String message = String((char*)payload).substring(0, length);
+  if (String(topic) == CONTROL_TOPIC) {
+    handleControlMessage(message);
+  } else if (String(topic) == UNLOCK_TOPIC) {
+    handleUnlockMessage(message);
+  }
+}
+
+void handleControlMessage(const String& message) {
+  deviceRunning = (message == "ligar");
+  Serial.println(deviceRunning ? "Dispositivo ligado" : "Dispositivo desligado");
+}
+
+void handleUnlockMessage(const String& message) {
+  if (message == "desbloquear") {
+    manualUnlocked = true;
+    digitalWrite(RELAY_PIN, HIGH);
+    publishRelayStatus("desbloqueado");
+    Serial.println("Relé desbloqueado manualmente");
+    relayBlocked = false; // Resetar o bloqueio manualmente
+    consecutiveLowReadings = 0; // Resetar contagem de leituras baixas
+  }
+}
+
 void publishHumidity(int humidityValue) {
   if (mqttClient.connected()) {
     mqttClient.publish(HUMIDITY_TOPIC, String(humidityValue).c_str());
@@ -88,45 +132,65 @@ void publishHumidity(int humidityValue) {
   }
 }
 
-// Enviar estado do relé via MQTT
 void publishRelayStatus(const char* status) {
   mqttClient.publish(RELAY_STATUS_TOPIC, status);
   Serial.print("Relé ");
   Serial.println(status);
 }
 
-// Enviar estado do reservatório via MQTT
 void publishReservoirStatus(bool blocked) {
   mqttClient.publish(RESERVOIR_STATUS_TOPIC, blocked ? "Vazio" : "Normal");
 }
 
-// Atualizar estado do relé com base na umidade do solo
 void updateRelayState(int humidityValue) {
   if (deviceRunning) {
     if (!manualUnlocked) {
-      if (humidityValue < MIN_HUMIDITY && !relayBlocked) {
-        if (millis() - relayActivationTime >= 5000) {
+      if (humidityValue < MIN_HUMIDITY) {
+        consecutiveLowReadings++;
+        if (consecutiveLowReadings >= 5) { // Defina o número desejado de leituras baixas consecutivas para ativar o bloqueio
           relayBlocked = true;
           digitalWrite(RELAY_PIN, LOW);
           publishRelayStatus("bloqueado");
-        } else {
-          digitalWrite(RELAY_PIN, HIGH);
-          publishRelayStatus("ativo");
         }
-      } else if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
+      } else {
+        consecutiveLowReadings = 0; // Resetar contagem de leituras baixas
+      }
+
+      if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
         digitalWrite(RELAY_PIN, LOW);
         publishRelayStatus("inativo");
+      } else {
+        digitalWrite(RELAY_PIN, HIGH);
+        publishRelayStatus("ativo");
       }
 
       if (previousRelayState != relayBlocked) {
         publishReservoirStatus(relayBlocked);
         previousRelayState = relayBlocked;
       }
-    } else {
-      if (millis() - relayActivationTime >= 5000) {
-        relayBlocked = true;
-        manualUnlocked = false;
+    } else { // Se foi desbloqueado manualmente
+      if (humidityValue < MIN_HUMIDITY) {
+        consecutiveLowReadings++;
+        if (consecutiveLowReadings >= 5) { // Defina o número desejado de leituras baixas consecutivas para ativar o bloqueio
+          relayBlocked = true;
+          digitalWrite(RELAY_PIN, LOW);
+          publishRelayStatus("bloqueado");
+        }
+      } else {
+        consecutiveLowReadings = 0; // Resetar contagem de leituras baixas
+      }
+
+      if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
+        digitalWrite(RELAY_PIN, LOW);
         publishRelayStatus("inativo");
+      } else {
+        digitalWrite(RELAY_PIN, HIGH);
+        publishRelayStatus("ativo");
+      }
+
+      if (previousRelayState != relayBlocked) {
+        publishReservoirStatus(relayBlocked);
+        previousRelayState = relayBlocked;
       }
     }
   } else {
@@ -136,8 +200,9 @@ void updateRelayState(int humidityValue) {
   }
 }
 
-// Ler e enviar umidade do solo
-void sendHumidity() {
+
+
+int readHumidity() {
   int humidityValue = analogRead(SOIL_SENSOR_PIN);
   humidityValue = map(humidityValue, 0, 4095, 0, 100);
   humidityValue = (humidityValue - 100) * -1;
@@ -149,24 +214,10 @@ void sendHumidity() {
     lastHumidityChangeTime = millis();
   }
 
+  return humidityValue;
+}
+
+void sendHumidityData(int humidityValue) {
   publishHumidity(humidityValue);
-
   updateRelayState(humidityValue);
-}
-
-void setup() {
-  Serial.begin(9600);
-  setupWiFi();
-  setupMQTT();
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);
-}
-
-void loop() {
-  if (!mqttClient.connected()) {
-    setupMQTT();
-  }
-  mqttClient.loop();
-  sendHumidity();
-  delay(1000);
 }
