@@ -24,8 +24,9 @@ PubSubClient mqttClient(espClient); // Cliente MQTT
 #define MAX_HUMIDITY 60
 
 bool deviceRunning = true; // Estado do dispositivo
+unsigned long relayActivationTime = 0;
+bool relayBlocked = false;
 
-// Função de callback para mensagens MQTT recebidas
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message;
   for (int i = 0; i < length; i++) {
@@ -64,7 +65,6 @@ void setup() {
   digitalWrite(RELAY_PIN, LOW); // Desliga o relé inicialmente
 }
 
-// Função para enviar a umidade do solo via MQTT
 void sendHumidity() {
   if (deviceRunning) { // Verifica se o dispositivo está ligado
     int humidityValue = analogRead(SOIL_SENSOR_PIN); // Realiza a leitura do sensor de umidade
@@ -75,12 +75,21 @@ void sendHumidity() {
     Serial.println("%");
 
     // Controla o relé com base na umidade medida
-    if (humidityValue < MIN_HUMIDITY) {
-      digitalWrite(RELAY_PIN, HIGH); // Liga o relé se a umidade estiver abaixo do limite mínimo
-      mqttClient.publish(RELAY_STATUS_TOPIC, "ativo"); // Publica o status do relé
-    } else if (humidityValue >= MAX_HUMIDITY) {
-      digitalWrite(RELAY_PIN, LOW); // Desliga o relé se a umidade atingir o limite máximo
+    if (humidityValue < MIN_HUMIDITY && !relayBlocked) {
+      if (millis() - relayActivationTime >= 5000) {
+        relayBlocked = true;
+        digitalWrite(RELAY_PIN, LOW); // Desliga o relé
+        mqttClient.publish(RELAY_STATUS_TOPIC, "bloqueado"); // Publica o status do relé
+        Serial.println("Relé bloqueado");
+      } else {
+        digitalWrite(RELAY_PIN, HIGH); // Liga o relé
+        mqttClient.publish(RELAY_STATUS_TOPIC, "ativo"); // Publica o status do relé
+        Serial.println("Relé ativado");
+      }
+    } else if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
+      digitalWrite(RELAY_PIN, LOW); // Desliga o relé
       mqttClient.publish(RELAY_STATUS_TOPIC, "inativo"); // Publica o status do relé
+      Serial.println("Relé desligado");
     }
 
     // Verifica se a conexão MQTT está ativa e publica a umidade do solo
@@ -97,7 +106,6 @@ void sendHumidity() {
   }
 }
 
-// Função para reconectar ao servidor MQTT
 void mqttReconnect() {
   while (!mqttClient.connected()) {
     Serial.print("Tentando conexão MQTT...");
@@ -119,5 +127,16 @@ void loop() {
   }
   mqttClient.loop(); // Mantém a comunicação com o servidor MQTT
   sendHumidity(); // Envia a umidade do solo
+
+  if (deviceRunning) {
+    int humidityValue = analogRead(SOIL_SENSOR_PIN);
+    humidityValue = map(humidityValue, 0, 4095, 0, 100);
+    humidityValue = (humidityValue - 100) * -1;
+    if (humidityValue >= MIN_HUMIDITY && humidityValue < MAX_HUMIDITY) {
+      relayActivationTime = millis(); // Atualiza o tempo de ativação do relé
+      relayBlocked = false; // Libera o relé
+    }
+  }
+
   delay(1000); // Aguarda 1 segundo antes de realizar uma nova leitura
 }
