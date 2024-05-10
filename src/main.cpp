@@ -3,8 +3,8 @@
 #include <PubSubClient.h>
 
 // Configurações do Wi-Fi
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "NGNL";
+const char* password = "Liso9445";
 
 // Configurações MQTT
 const char* mqtt_server = "broker.emqx.io";
@@ -147,13 +147,13 @@ void updateRelayState(int humidityValue) {
     if (!manualUnlocked) {
       if (humidityValue < MIN_HUMIDITY) {
         consecutiveLowReadings++;
-        if (consecutiveLowReadings >= 5) { // Defina o número desejado de leituras baixas consecutivas para ativar o bloqueio
+        if (consecutiveLowReadings >= 5) {
           relayBlocked = true;
           digitalWrite(RELAY_PIN, LOW);
           publishRelayStatus("bloqueado");
         }
       } else {
-        consecutiveLowReadings = 0; // Resetar contagem de leituras baixas
+        consecutiveLowReadings = 0;
       }
 
       if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
@@ -168,29 +168,25 @@ void updateRelayState(int humidityValue) {
         publishReservoirStatus(relayBlocked);
         previousRelayState = relayBlocked;
       }
-    } else { // Se foi desbloqueado manualmente
+    } else {
+      // Se manualmente desbloqueado, mantenha o relé ativo até nova instrução.
+      digitalWrite(RELAY_PIN, HIGH);
+      publishRelayStatus("desbloqueado");
+      
+      // Verificar se as condições para bloqueio estão sendo atendidas novamente.
       if (humidityValue < MIN_HUMIDITY) {
         consecutiveLowReadings++;
-        if (consecutiveLowReadings >= 5) { // Defina o número desejado de leituras baixas consecutivas para ativar o bloqueio
+        if (consecutiveLowReadings >= 5) {
           relayBlocked = true;
           digitalWrite(RELAY_PIN, LOW);
           publishRelayStatus("bloqueado");
         }
-      } else {
-        consecutiveLowReadings = 0; // Resetar contagem de leituras baixas
-      }
-
-      if (humidityValue >= MAX_HUMIDITY || relayBlocked) {
+      } else if (humidityValue >= MAX_HUMIDITY) {
+        // Se a umidade estiver acima do máximo, desliga o relé.
         digitalWrite(RELAY_PIN, LOW);
         publishRelayStatus("inativo");
       } else {
-        digitalWrite(RELAY_PIN, HIGH);
-        publishRelayStatus("ativo");
-      }
-
-      if (previousRelayState != relayBlocked) {
-        publishReservoirStatus(relayBlocked);
-        previousRelayState = relayBlocked;
+        consecutiveLowReadings = 0;
       }
     }
   } else {
