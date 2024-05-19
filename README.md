@@ -38,7 +38,7 @@
         <li><a href="#installation">Instalação e montagem</a></li>
       </ul>
     </li>
-    <li><a href="#usage">Uso</a></li>
+    <!-- <li><a href="#usage">Uso</a></li> -->
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Desenvolvedores</a></li>
@@ -181,12 +181,12 @@ Biblioteca externas necessárias:
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
-<!-- USAGE EXAMPLES -->
+<!-- USAGE EXAMPLES
 
 ## Uso
 [Em Construção]
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top</a>)</p> -->
 
 <!-- ROADMAP -->
 
@@ -195,7 +195,7 @@ Biblioteca externas necessárias:
 - [x] Artigo Científico Parte 1 (13/03/2024)
 - [x] Artigo Científico Parte 2 (26/03/2024)
 - [x] Artigo Científico Parte 3 (23/04/2024)
-- [ ] Desenvolvimento do Projeto e Entrega. (14/05/2024)
+- [x] Desenvolvimento do Projeto e Entrega. (19/05/2024)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
